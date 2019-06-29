@@ -6,10 +6,10 @@ var ctx = canvas.getContext("2d");
 
 /** Scaling of the canvas's internal resolution */
 var scale = 2;
-/** Buffer storing the last three drawn points. */ 
-var buffer = new CircularBuffer(3);
 /** Width of the pen stroke */
 var width = 10;
+/** The last 3 points for each finger/stylus currently touching the screen */
+var touches = {};
 
 class DrawingPoint {
     constructor(event) {
@@ -31,6 +31,22 @@ class DrawingPoint {
         return new Vector2(this.x, this.y);
     }
 }
+
+/**
+ * For-all function for the touch list interface.
+ * @param f Function callback that takes as arguments the touch, the touch identifier, and the
+ * index into the touch list.
+ */
+try {
+    /* TouchList will not be defined for devices w/o touch capabilities */
+    TouchList.prototype.forAll = function(f) {
+        for (let i = 0; i < this.length; i++) {
+            let touch = this[i];
+            let id = touch.identifier;
+            f(touch, id, i);
+        }
+    }
+} catch {}
 
 /**
  * Evaluate a quadratic bezier curve at a certain time value.
@@ -91,6 +107,36 @@ function getWidth(pressure) {
 }
 
 /**
+ * Draw points from a buffer of DrawingPoint objects.
+ * @params buffer {CircularBuffer} Buffer of max size 3 filled with drawing points.
+ */
+function drawFromBuffer(buffer) {
+    if (buffer.size == 2) {
+        /* Not enough points to interpolate, just draw a straight line */
+        let pt1 = buffer.at(0);
+        let pt2 = buffer.at(1);
+
+        let v1 = pt1.toVec();
+        let v2 = pt2.toVec();
+        let end = v1.mid(v2);
+        
+        drawVariableWidthLine(v1.mid(end), v1, getWidth(pt1.pressure),
+                              end, getWidth(pt2.pressure));
+    } else if (buffer.size == 3){
+        let pt1 = buffer.at(0);
+        let pt2 = buffer.at(1);
+        let pt3 = buffer.at(2);
+
+        let v1 = pt1.toVec();
+        let v2 = pt2.toVec();
+        let v3 = pt3.toVec();
+
+        drawVariableWidthLine(v2, v1.mid(v2), getWidth((pt1.pressure + pt2.pressure) * 0.5),
+                              v2.mid(v3), getWidth((pt2.pressure + pt3.pressure) * 0.5));
+    } 
+}
+
+/**
  * Resize the canvas to be the same size as the window.
  */
 function resizeCanvas() {
@@ -105,39 +151,55 @@ resizeCanvas();
 document.body.addEventListener("contextmenu", (ev) => {
     ev.preventDefault();
 });
+
+/* Touch event handlers */
 canvas.addEventListener("touchstart", (ev) => {
     ev.preventDefault();
-    buffer.push(new DrawingPoint(ev.touches[0]));
+
+    ev.changedTouches.forAll((touch, id) => {
+        touches[id] = new CircularBuffer(3);
+        touches[id].push(new DrawingPoint(touch));
+    });
 });
 canvas.addEventListener("touchmove", (ev) => {
     ev.preventDefault();
-    
-    buffer.push(new DrawingPoint(ev.touches[0]));
-    if (buffer.size == 2) {
-        /* Not enough points to interpolate, just draw a straight line */
-        let pt1 = buffer.at(0);
-        let pt2 = buffer.at(1);
 
-        let v1 = pt1.toVec();
-        let v2 = pt2.toVec();
-        let end = v1.mid(v2);
-        
-        drawVariableWidthLine(v1.mid(end), v1, getWidth(pt1.pressure),
-                                          end, getWidth(pt2.pressure));
-    } else {
-        let pt1 = buffer.at(0);
-        let pt2 = buffer.at(1);
-        let pt3 = buffer.at(2);
-
-        let v1 = pt1.toVec();
-        let v2 = pt2.toVec();
-        let v3 = pt3.toVec();
-
-        drawVariableWidthLine(v2, v1.mid(v2), getWidth((pt1.pressure + pt2.pressure) * 0.5),
-                                  v2.mid(v3), getWidth((pt2.pressure + pt3.pressure) * 0.5));
-    }
+    ev.changedTouches.forAll((touch, id) => {
+        let buffer = touches[id];
+        buffer.push(new DrawingPoint(touch));
+        drawFromBuffer(buffer);
+    });
 });
 canvas.addEventListener("touchend", (ev) => {
     ev.preventDefault();
-    buffer.clear();
+    ev.changedTouches.forAll((touch, id) => { touches[id] = undefined; });
+});
+
+/* Mouse event handlers */
+canvas.addEventListener("mousedown", (ev) => {
+    touches["mouse"] = new CircularBuffer(3);
+    touches["mouse"].push(new DrawingPoint(ev));
+    touches["mouse"].button = ev.button;
+});
+canvas.addEventListener("mousemove", (ev) => {
+    if (touches["mouse"] !== undefined) {
+        let buffer = touches["mouse"];
+        buffer.push(new DrawingPoint(ev));
+        
+        if (touches["mouse"].button === 2) {
+            /* Erase with right click */
+            let oldWidth = width;
+            width *= 3;
+            ctx.globalCompositeOperation = 'destination-out';
+            
+            drawFromBuffer(buffer);
+            ctx.globalCompositeOperation = 'source-over';
+            width = oldWidth;
+        } else {
+            drawFromBuffer(buffer);
+        }
+    }
+});
+canvas.addEventListener("mouseup", (ev) => {
+    touches["mouse"] = undefined;
 });
