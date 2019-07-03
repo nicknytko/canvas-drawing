@@ -195,6 +195,10 @@ canvas.addEventListener("touchend", (ev) => {
     ev.preventDefault();
     ev.changedTouches.forAll((touch, id) => { touches[id] = undefined; });
 });
+canvas.addEventListener("touchcancel", (ev) => {
+    ev.preventDefault();
+    ev.changedTouches.forAll((touch, id) => { touches[id] = undefined; });
+});
 
 /* Mouse event handlers */
 canvas.addEventListener("mousedown", (ev) => {
@@ -222,6 +226,9 @@ canvas.addEventListener("mousemove", (ev) => {
     }
 });
 canvas.addEventListener("mouseup", (ev) => {
+    touches["mouse"] = undefined;
+});
+document.body.addEventListener("mouseleave", (ev) => {
     touches["mouse"] = undefined;
 });
 
