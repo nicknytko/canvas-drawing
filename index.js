@@ -10,11 +10,14 @@ var scale = 2;
 var width = 10;
 /** The last 3 points for each finger/stylus currently touching the screen */
 var touches = {};
+/** If this device has a stylus, then don't recognise normal touch inputs. */
+var stylusEnabled = false;
 
 class DrawingPoint {
     constructor(event) {
-        this.x = event.clientX * scale;
-        this.y = event.clientY * scale;
+        let rect = canvas.getBoundingClientRect();
+        this.x = (event.clientX - rect.left) * scale;
+        this.y = (event.clientY - rect.top) * scale;
 
         if ('webkitForce' in event) {
             this.pressure = event.webkitForce;
@@ -103,7 +106,7 @@ function drawVariableWidthLine(ctrl, pt1, w1, pt2, w2) {
  * @returns pen width.
  */
 function getWidth(pressure) {
-    return width * Math.pow(pressure, 1.5) * scale;
+    return width * Math.pow(pressure, 0.5) * scale;
 }
 
 /**
@@ -131,6 +134,14 @@ function drawFromBuffer(buffer) {
         let v2 = pt2.toVec();
         let v3 = pt3.toVec();
 
+        let dist = v1.dist(v3);
+        if (dist < 10) {
+            /* Try to smooth out slow lines */
+            v2 = v1.mid(v3);
+            pt2.x = v2.x;
+            pt2.y = v2.y;
+        }
+
         drawVariableWidthLine(v2, v1.mid(v2), getWidth((pt1.pressure + pt2.pressure) * 0.5),
                               v2.mid(v3), getWidth((pt2.pressure + pt3.pressure) * 0.5));
     } 
@@ -157,6 +168,14 @@ canvas.addEventListener("touchstart", (ev) => {
     ev.preventDefault();
 
     ev.changedTouches.forAll((touch, id) => {
+        if ('touchType' in touch) {
+            if (stylusEnabled && touch.touchType !== "stylus") {
+                return;
+            }
+            if (touch.touchType === "stylus") {
+                stylusEnabled = true;
+            }
+        }
         touches[id] = new CircularBuffer(3);
         touches[id].push(new DrawingPoint(touch));
     });
@@ -165,9 +184,11 @@ canvas.addEventListener("touchmove", (ev) => {
     ev.preventDefault();
 
     ev.changedTouches.forAll((touch, id) => {
-        let buffer = touches[id];
-        buffer.push(new DrawingPoint(touch));
-        drawFromBuffer(buffer);
+        if (touches[id] !== undefined) {
+            let buffer = touches[id];
+            buffer.push(new DrawingPoint(touch));
+            drawFromBuffer(buffer);
+        }
     });
 });
 canvas.addEventListener("touchend", (ev) => {
@@ -203,3 +224,14 @@ canvas.addEventListener("mousemove", (ev) => {
 canvas.addEventListener("mouseup", (ev) => {
     touches["mouse"] = undefined;
 });
+
+let buttons = document.getElementsByClassName("control");
+for (let i = 0; i < buttons.length; i++) {
+    buttons[i].addEventListener("click", (ev) => {
+        if (buttons[i].classList.contains("selected")) {
+            buttons[i].classList.remove("selected");
+        } else {
+            buttons[i].classList.add("selected");
+        }
+    });
+}

@@ -13,7 +13,15 @@ export class Vector2 {
     length() {
         return Math.sqrt(this.x * this.x + this.y * this.y);
     }
-
+    
+    /**
+     * Get the euclidean distance to another vector.
+     * @param other Other vector.
+     */
+    dist(other) {
+        return this.subtract(other).length();
+    }
+    
     /**
      * Performs vector addition.
      * @param other If a scalar, will add uniformly.  If a vector, will add element-wise.
