@@ -5,19 +5,24 @@ var canvas = document.getElementById("canvas");
 var ctx = canvas.getContext("2d");
 
 /** Scaling of the canvas's internal resolution */
-var scale = 2;
+const scale = 2;
+const min_dist = 7;
 /** Width of the pen stroke */
 var width = 10;
-/** The last 3 points for each finger/stylus currently touching the screen */
+/** The buffer of points for each current touch */
 var touches = {};
 /** If this device has a stylus, then don't recognise normal touch inputs. */
 var stylusEnabled = false;
+/** Current selected tool */
+var curTool = null;
 
 class DrawingPoint {
     constructor(event) {
         let rect = canvas.getBoundingClientRect();
         this.x = (event.clientX - rect.left) * scale;
         this.y = (event.clientY - rect.top) * scale;
+        this.origX = this.x;
+        this.origY = this.y;
 
         if ('webkitForce' in event) {
             this.pressure = event.webkitForce;
@@ -32,6 +37,16 @@ class DrawingPoint {
 
     toVec() {
         return new Vector2(this.x, this.y);
+    }
+
+    toOrigVec() {
+        return new Vector2(this.origX, this.origY);
+    }
+
+    copy(other) {
+        this.x = other.x;
+        this.y = other.y;
+        this.pressure = other.pressure;
     }
 }
 
@@ -50,6 +65,58 @@ try {
         }
     }
 } catch {}
+
+/**
+ * Evaluate a cubic hermite spline at a certain time value.
+ * @param t Time, scalar between 0 and 1.
+ * @param pt1 {Vector2} Starting point
+ * @param tan1 {Vector2} Tangent at the starting point
+ * @param pt2 {Vector2} Ending point
+ * @param tan2 {Vector2} Tangent at the ending point
+ * @returns {Vector2} the hermite spline evaluated at the specified time.
+ */
+function evalHermite(t, pt1, tan1, pt2, tan2) {
+    if (t <= 0) {
+        return pt1;
+    } else if (t >= 1) {
+        return pt2;
+    }
+
+    let t3 = t * t * t;
+    let t2 = t * t;
+    let p0 = pt1.multiply(2 * t3 - 3 * t2 + 1);
+    let m0 = tan1.multiply(t3 - 2 * t2 + t);
+    let p1 = pt2.multiply(-2 * t3 + 3 * t2);
+    let m1 = tan2.multiply(t3 - t2);
+    return p0.add(m0).add(p1.add(m1));
+}
+
+/**
+ * Draw a variable width cubic hermite spline.  The width values are linearly interpolated.
+ * @param pt1 {Vector2} Starting point
+ * @param tan1 {Vector2} Tangent at the starting point
+ * @param w1 {number} Starting width
+ * @param pt2 {Vector2} Ending point
+ * @param tan2 {Vector2} Tangent at the ending point
+ * @param w2 {number} Ending width
+ */
+function drawVariableWidthHermite(ctx, pt1, tan1, w1, pt2, tan2, w2) {
+    let pts = Math.max(1, Math.ceil(Math.sqrt(pt2.subtract(pt1).length())));
+    for (let i = 0; i < pts; i++) {
+        let t = (i / pts);
+        let tn = ((i+1) / pts);
+        let tm = (t + tn) / 2;
+        let st = evalHermite(t, pt1, tan1, pt2, tan2);
+        let end = evalHermite(tn, pt1, tan1, pt2, tan2);
+        
+        ctx.beginPath();
+        ctx.moveTo(st.x, st.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.lineWidth = (w1 * (1 - tm)) + (w2 * tm);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+    }
+}
 
 /**
  * Evaluate a quadratic bezier curve at a certain time value.
@@ -80,7 +147,7 @@ function evalBezier(t, ctrl, pt1, pt2) {
  * @param pt2 {Vector2} Ending point
  * @param w2 {number} Ending width.
  */
-function drawVariableWidthLine(ctrl, pt1, w1, pt2, w2) {
+function drawVariableWidthBezier(ctrl, pt1, w1, pt2, w2) {
     /* Evaluate the bezier at various points to make a smoother line,
        and because html5 canvas doesn't allow for width interpolation. */
     let pts = Math.max(1, Math.ceil(Math.sqrt(pt2.subtract(pt1).length())));
@@ -106,7 +173,13 @@ function drawVariableWidthLine(ctrl, pt1, w1, pt2, w2) {
  * @returns pen width.
  */
 function getWidth(pressure) {
-    return width * Math.pow(pressure, 0.5) * scale;
+    let w = width * Math.pow(pressure, 0.75) * scale; 
+    switch (curTool) {
+    case 'eraser':
+        return w * 3;
+    default:
+        return w;
+    }
 }
 
 /**
@@ -114,6 +187,17 @@ function getWidth(pressure) {
  * @params buffer {CircularBuffer} Buffer of max size 3 filled with drawing points.
  */
 function drawFromBuffer(buffer) {
+    switch (curTool) {
+    case 'pen':
+        ctx.globalCompositeOperation = 'source-over';
+        break;
+    case 'eraser':
+        ctx.globalCompositeOperation = 'destination-out';
+        break;
+    default:
+        return;
+    }
+    
     if (buffer.size == 2) {
         /* Not enough points to interpolate, just draw a straight line */
         let pt1 = buffer.at(0);
@@ -123,8 +207,8 @@ function drawFromBuffer(buffer) {
         let v2 = pt2.toVec();
         let end = v1.mid(v2);
         
-        drawVariableWidthLine(v1.mid(end), v1, getWidth(pt1.pressure),
-                              end, getWidth(pt2.pressure));
+        drawVariableWidthBezier(ctx, v1.mid(end), v1, getWidth(pt1.pressure),
+                                end, getWidth(pt2.pressure));
     } else if (buffer.size == 3){
         let pt1 = buffer.at(0);
         let pt2 = buffer.at(1);
@@ -134,16 +218,8 @@ function drawFromBuffer(buffer) {
         let v2 = pt2.toVec();
         let v3 = pt3.toVec();
 
-        let dist = v1.dist(v3);
-        if (dist < 10) {
-            /* Try to smooth out slow lines */
-            v2 = v1.mid(v3);
-            pt2.x = v2.x;
-            pt2.y = v2.y;
-        }
-
-        drawVariableWidthLine(v2, v1.mid(v2), getWidth((pt1.pressure + pt2.pressure) * 0.5),
-                              v2.mid(v3), getWidth((pt2.pressure + pt3.pressure) * 0.5));
+        drawVariableWidthBezier(v2, v1.mid(v2), getWidth((pt1.pressure + pt2.pressure) * 0.5),
+                                v2.mid(v3), getWidth((pt2.pressure + pt3.pressure) * 0.5));
     } 
 }
 
@@ -166,7 +242,10 @@ document.body.addEventListener("contextmenu", (ev) => {
 /* Touch event handlers */
 canvas.addEventListener("touchstart", (ev) => {
     ev.preventDefault();
-
+    if (curTool === null) {
+        return;
+    }
+    
     ev.changedTouches.forAll((touch, id) => {
         if ('touchType' in touch) {
             if (stylusEnabled && touch.touchType !== "stylus") {
@@ -186,59 +265,90 @@ canvas.addEventListener("touchmove", (ev) => {
     ev.changedTouches.forAll((touch, id) => {
         if (touches[id] !== undefined) {
             let buffer = touches[id];
-            buffer.push(new DrawingPoint(touch));
-            drawFromBuffer(buffer);
+            let last = buffer.at(buffer.length - 1);
+            let curr = new DrawingPoint(touch);
+            if (last.toOrigVec().dist(curr.toVec()) < min_dist) {
+                last.copy(curr);
+            } else {
+                buffer.push(curr);
+                drawFromBuffer(buffer);
+            }
         }
     });
 });
 canvas.addEventListener("touchend", (ev) => {
     ev.preventDefault();
-    ev.changedTouches.forAll((touch, id) => { touches[id] = undefined; });
+    ev.changedTouches.forAll((touch, id) => {
+        if (touches[id] !== undefined) {
+            drawFromBuffer(touches[id]);
+        }
+        touches[id] = undefined;
+    });
 });
 canvas.addEventListener("touchcancel", (ev) => {
     ev.preventDefault();
-    ev.changedTouches.forAll((touch, id) => { touches[id] = undefined; });
+    ev.changedTouches.forAll((touch, id) => {
+        if (touches[id] !== undefined) {
+            drawFromBuffer(touches[id]);
+        }
+        touches[id] = undefined;
+    });
 });
 
 /* Mouse event handlers */
 canvas.addEventListener("mousedown", (ev) => {
+    if (curTool === null) {
+        return;
+    }
+    
     touches["mouse"] = new CircularBuffer(3);
     touches["mouse"].push(new DrawingPoint(ev));
-    touches["mouse"].button = ev.button;
 });
 canvas.addEventListener("mousemove", (ev) => {
     if (touches["mouse"] !== undefined) {
         let buffer = touches["mouse"];
-        buffer.push(new DrawingPoint(ev));
-        
-        if (touches["mouse"].button === 2) {
-            /* Erase with right click */
-            let oldWidth = width;
-            width *= 3;
-            ctx.globalCompositeOperation = 'destination-out';
-            
-            drawFromBuffer(buffer);
-            ctx.globalCompositeOperation = 'source-over';
-            width = oldWidth;
+        let last = buffer.at(buffer.length - 1);
+        let curr = new DrawingPoint(ev);
+        if (last.toOrigVec().dist(curr.toVec()) < min_dist) {
+            last.copy(curr);
         } else {
+            buffer.push(curr);
             drawFromBuffer(buffer);
         }
     }
 });
 canvas.addEventListener("mouseup", (ev) => {
+    if (touches["mouse"] !== undefined) {
+        drawFromBuffer(touches["mouse"]);
+    }
     touches["mouse"] = undefined;
 });
 document.body.addEventListener("mouseleave", (ev) => {
+    if (touches["mouse"] !== undefined) {
+        drawFromBuffer(touches["mouse"]);
+    }
     touches["mouse"] = undefined;
 });
 
-let buttons = document.getElementsByClassName("control");
+var buttons = document.getElementsByClassName("control");
+function deselectAllButtons() {
+    for (let i = 0; i < buttons.length; i++) {
+        buttons[i].classList.remove("selected");
+    }
+}
+
 for (let i = 0; i < buttons.length; i++) {
-    buttons[i].addEventListener("click", (ev) => {
+    buttons[i].addEventListener("mousedown", (ev) => {
         if (buttons[i].classList.contains("selected")) {
             buttons[i].classList.remove("selected");
+            curTool = null;
         } else {
+            deselectAllButtons();
             buttons[i].classList.add("selected");
+            curTool = buttons[i].getAttribute("control");
         }
     });
 }
+
+buttons[0].classList.add("selected");
+curTool = "pen";

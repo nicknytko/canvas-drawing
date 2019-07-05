@@ -17,6 +17,10 @@ export class CircularBuffer {
         return this.end - this.start;
     }
 
+    get length() {
+        return this.end - this.start;
+    }
+
     /**
      * Takes the first item off the buffer and returns it.
      */
