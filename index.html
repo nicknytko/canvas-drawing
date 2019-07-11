@@ -24,8 +24,8 @@
              overscroll-behavior: none;
          }
          .control-group {
-             margin-left: 50px;
-             margin-right: 50px;
+             margin-left: 25px;
+             margin-right: 25px;
              height: 40px;
          }
          .control {
@@ -48,6 +48,12 @@
              clip-path: circle(0px);
              -webkit-clip-path: circle(0px);
          }
+         .setting {
+             width: 30px;
+             height: 30px;
+             padding: 5px;
+             display: inline-block;
+         }
         </style>
     </head>
     <body>
@@ -63,6 +69,10 @@
                 </div>
             </div>
             <div class="control-group">
+                <div class="setting"></div>
+                <div class="setting">
+                    <div style="background: blue; border-radius: 100%"></div>
+                </div>
             </div>
         </div>
         <canvas id="canvas"></canvas>
