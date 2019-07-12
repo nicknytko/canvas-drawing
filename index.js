@@ -16,6 +16,9 @@ var stylusEnabled = false;
 /** Current selected tool */
 var curTool = null;
 
+var widthLine = document.querySelector("[setting=width]").children[1].getSVGDocument().getElementById("width-line");
+var colorCircle = document.querySelector("[setting=color]").children[1].getSVGDocument().getElementById("color-circle");
+
 class DrawingPoint {
     constructor(event) {
         let rect = canvas.getBoundingClientRect();
@@ -197,7 +200,7 @@ function drawFromBuffer(buffer) {
     default:
         return;
     }
-    
+
     if (buffer.size == 2) {
         /* Not enough points to interpolate, just draw a straight line */
         let pt1 = buffer.at(0);
@@ -207,7 +210,7 @@ function drawFromBuffer(buffer) {
         let v2 = pt2.toVec();
         let end = v1.mid(v2);
         
-        drawVariableWidthBezier(ctx, v1.mid(end), v1, getWidth(pt1.pressure),
+        drawVariableWidthBezier(v1.mid(end), v1, getWidth(pt1.pressure),
                                 end, getWidth(pt2.pressure));
     } else if (buffer.size == 3){
         let pt1 = buffer.at(0);
@@ -352,3 +355,9 @@ for (let i = 0; i < buttons.length; i++) {
 
 buttons[0].classList.add("selected");
 curTool = "pen";
+
+var elem = document.querySelector("[setting=color]").children[0];
+console.log(elem);
+elem.addEventListener("click", (ev) => {
+    document.querySelector(".color-popup").classList.toggle("hidden");
+});
