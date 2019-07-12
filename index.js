@@ -9,7 +9,7 @@ const scale = 2;
 const min_dist = 7;
 /** Width of the pen stroke */
 var width = 10;
-var color = "#FFFFFF";
+var color = "rgba(0.0,0.0,0.0,1.0)";
 /** The buffer of points for each current touch */
 var touches = {};
 /** If this device has a stylus, then don't recognise normal touch inputs. */
@@ -22,13 +22,18 @@ var colorSvg = document.querySelector("[setting=color]").children[1];
 var colorCircle;
 var widthLine;
 
-widthSvg.onload = function() {
+widthSvg.addEventListener("load", function() {
     widthLine = widthSvg.getSVGDocument().getElementById("width-line");
-}
-
-colorSvg.onload = function() {
+});
+colorSvg.addEventListener("load", function() {
     colorCircle = colorSvg.getSVGDocument().getElementById("color-circle");
-}
+});
+window.addEventListener("load", function() {
+    try {
+        widthLine = widthSvg.getSVGDocument().getElementById("width-line");
+        colorCircle = colorSvg.getSVGDocument().getElementById("color-circle");
+    } catch {}
+});
 
 class DrawingPoint {
     constructor(event) {
