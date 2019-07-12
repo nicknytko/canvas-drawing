@@ -9,6 +9,7 @@ const scale = 2;
 const min_dist = 7;
 /** Width of the pen stroke */
 var width = 10;
+var color = "#FFFFFF";
 /** The buffer of points for each current touch */
 var touches = {};
 /** If this device has a stylus, then don't recognise normal touch inputs. */
@@ -16,8 +17,18 @@ var stylusEnabled = false;
 /** Current selected tool */
 var curTool = null;
 
-var widthLine = document.querySelector("[setting=width]").children[1].getSVGDocument().getElementById("width-line");
-var colorCircle = document.querySelector("[setting=color]").children[1].getSVGDocument().getElementById("color-circle");
+var widthSvg = document.querySelector("[setting=width]").children[1];
+var colorSvg = document.querySelector("[setting=color]").children[1];
+var colorCircle;
+var widthLine;
+
+widthSvg.onload = function() {
+    widthLine = widthSvg.getSVGDocument().getElementById("width-line");
+}
+
+colorSvg.onload = function() {
+    colorCircle = colorSvg.getSVGDocument().getElementById("color-circle");
+}
 
 class DrawingPoint {
     constructor(event) {
@@ -193,6 +204,7 @@ function drawFromBuffer(buffer) {
     switch (curTool) {
     case 'pen':
         ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = color;
         break;
     case 'eraser':
         ctx.globalCompositeOperation = 'destination-out';
@@ -356,8 +368,17 @@ for (let i = 0; i < buttons.length; i++) {
 buttons[0].classList.add("selected");
 curTool = "pen";
 
-var elem = document.querySelector("[setting=color]").children[0];
-console.log(elem);
-elem.addEventListener("click", (ev) => {
+document.querySelector("[setting=color]").children[0].addEventListener("click", (ev) => {
     document.querySelector(".color-popup").classList.toggle("hidden");
 });
+
+var circle_buttons = document.getElementsByClassName("circle");
+for (let i = 0; i < circle_buttons.length; i++) {
+    let circ = circle_buttons[i];
+    circ.addEventListener("mousedown", (ev) => {
+        let col = circ.style.backgroundColor.toString();
+        colorCircle.style.fill = col;
+        color = col;
+        document.querySelector(".color-popup").classList.add("hidden");
+    });
+}
