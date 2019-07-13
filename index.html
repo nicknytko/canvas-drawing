@@ -81,7 +81,7 @@
              position: absolute;
              transform: translate(-50%, -50%);
          }
-         .color-popup {
+         .popup {
              position: absolute;
              transform: translate(calc(15px - 50%), 0);
              opacity: 1.0;
@@ -94,7 +94,7 @@
              transition-property: transform, opacity;
              z-index: 2;
          }
-         .color-popup.hidden {
+         .popup.hidden {
              opacity: 0.0;
              transform: translate(calc(15px - 50%), -10px);
              pointer-events: none;
@@ -117,11 +117,14 @@
                 <div class="setting" setting="width">
                     <div class="setting-select"></div>
                     <object type="image/svg+xml" data="width.svg" style="width: 30px; height: 30px"></object>
+                    <div class="popup hidden" popup="width">
+                        <input type="range" min="2" max="10" value="5" class="slider" id="width-slider">
+                    </div>
                 </div>
                 <div class="setting" setting="color">
                     <div class="setting-select"></div>
                     <object type="image/svg+xml" data="color.svg" style="width: 30px; height: 30px"></object>
-                    <div class="color-popup hidden">
+                    <div class="popup hidden" popup="color">
                         <div class="circle" style="background-color: #F44336"></div>
                         <div class="circle" style="background-color: #E91E63"></div>
                         <div class="circle" style="background-color: #9C27B0"></div>

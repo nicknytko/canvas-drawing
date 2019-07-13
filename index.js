@@ -242,10 +242,8 @@ function drawFromBuffer(buffer) {
         
         let v1 = pt1.toVec();
         let v2 = pt2.toVec();
-        let end = v1.mid(v2);
-        
-        drawVariableWidthBezier(v1.mid(end), v1, getWidth(pt1.pressure),
-                                end, getWidth(pt2.pressure));
+        drawVariableWidthBezier(v1.mid(v2), v1, getWidth(pt1.pressure),
+                                v2, getWidth(pt2.pressure));
     }
 }
 
@@ -263,6 +261,16 @@ function moveEraser(pt) {
     let rect = canvas.getBoundingClientRect();
     eraserCircle.style.top = rect.top + pt.y / scale;
     eraserCircle.style.left = rect.left + pt.x / scale;
+}
+
+function setWidthSetting(newWidth) {
+    if (curTool === "eraser") {
+        widthEraser = newWidth * 5;
+    } else {
+        width = newWidth;
+    }
+
+    widthLine.style.strokeWidth = (newWidth * 4) + "px";
 }
 
 /**
@@ -313,12 +321,30 @@ function onDownEvent(touch, id) {
     
     let newpt = new DrawingPoint(touch);
     touches[id] = new CircularBuffer(3);
-    touches[id].push(new DrawingPoint(touch));
+    touches[id].push(newpt);
     
     if (curTool === "eraser") {
         showEraserCircle(widthEraser);
         moveEraser(newpt);
     }
+}
+
+/**
+ * Handler for touch/mouse up and cancel events.
+ * @param touch The touch or mouse event.
+ * @param id The touch id, or string "mouse" if a mouse event.
+ */
+function onUpEvent(touch, id) {
+    if (touches[id] !== undefined) {
+        if (touches[id] !== undefined) {
+            drawFromBuffer(touches[id]);
+        }
+        touches[id] = undefined;
+
+        if (curTool === "eraser") {
+            hideEraserCircle();
+        }
+    }    
 }
 
 /**
@@ -348,54 +374,18 @@ canvas.addEventListener("touchmove", (ev) => {
 });
 canvas.addEventListener("touchend", (ev) => {
     ev.preventDefault();
-    ev.changedTouches.forAll((touch, id) => {
-        if (touches[id] !== undefined) {
-            drawFromBuffer(touches[id]);
-        }
-        touches[id] = undefined;
-    });
-
-    if (curTool === "eraser") {
-        hideEraserCircle();
-    }
+    ev.changedTouches.forAll(onUpEvent);
 });
 canvas.addEventListener("touchcancel", (ev) => {
     ev.preventDefault();
-    ev.changedTouches.forAll((touch, id) => {
-        if (touches[id] !== undefined) {
-            drawFromBuffer(touches[id]);
-        }
-        touches[id] = undefined;
-    });
-
-    if (curTool === "eraser") {
-        hideEraserCircle();
-    }
+    ev.changedTouches.forAll(onUpEvent);
 });
 
 /* Mouse event handlers */
 canvas.addEventListener("mousedown", (ev) => { onDownEvent(ev, "mouse"); });
 canvas.addEventListener("mousemove", (ev) => { onMoveEvent(ev, "mouse"); });
-canvas.addEventListener("mouseup", (ev) => {
-    if (touches["mouse"] !== undefined) {
-        drawFromBuffer(touches["mouse"]);
-    }
-    touches["mouse"] = undefined;
-
-    if (curTool === "eraser") {
-        hideEraserCircle();
-    }
-});
-document.body.addEventListener("mouseleave", (ev) => {
-    if (touches["mouse"] !== undefined) {
-        drawFromBuffer(touches["mouse"]);
-    }
-    touches["mouse"] = undefined;
-
-    if (curTool === "eraser") {
-        hideEraserCircle();
-    }
-});
+canvas.addEventListener("mouseup", (ev) => { onUpEvent(ev, "mouse"); });
+document.body.addEventListener("mouseleave", (ev) => { onUpEvent(ev, "mouse"); });
 
 /* Set up all the controls */
 var buttons = document.getElementsByClassName("control");
@@ -422,9 +412,11 @@ buttons[0].classList.add("selected");
 curTool = "pen";
 
 /* Set up the color picker */
-
 document.querySelector("[setting=color]").children[0].addEventListener("click", (ev) => {
-    document.querySelector(".color-popup").classList.toggle("hidden");
+    document.querySelector("[popup=color]").classList.toggle("hidden");
+});
+document.querySelector("[setting=width]").children[0].addEventListener("click", (ev) => {
+    document.querySelector("[popup=width]").classList.toggle("hidden");
 });
 
 var circle_buttons = document.getElementsByClassName("circle");
@@ -434,6 +426,11 @@ for (let i = 0; i < circle_buttons.length; i++) {
         let col = circ.style.backgroundColor.toString();
         colorCircle.style.fill = col;
         color = col;
-        document.querySelector(".color-popup").classList.add("hidden");
+        document.querySelector("[popup=color]").classList.add("hidden");
     });
 }
+
+let widthSlider = document.getElementById("width-slider");
+widthSlider.addEventListener("input", (ev) => {
+    setWidthSetting(parseFloat(widthSlider.value));
+});
