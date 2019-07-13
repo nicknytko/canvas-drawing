@@ -9,6 +9,7 @@ const scale = 2;
 const min_dist = 7;
 /** Width of the pen stroke */
 var width = 10;
+var widthEraser = 30;
 var color = "rgba(0.0,0.0,0.0,1.0)";
 /** The buffer of points for each current touch */
 var touches = {};
@@ -21,6 +22,9 @@ var widthSvg = document.querySelector("[setting=width]").children[1];
 var colorSvg = document.querySelector("[setting=color]").children[1];
 var colorCircle;
 var widthLine;
+
+var eraserCircle = document.getElementById("eraser-circle");
+hideEraserCircle();
 
 widthSvg.addEventListener("load", function() {
     widthLine = widthSvg.getSVGDocument().getElementById("width-line");
@@ -192,12 +196,11 @@ function drawVariableWidthBezier(ctrl, pt1, w1, pt2, w2) {
  * @returns pen width.
  */
 function getWidth(pressure) {
-    let w = width * Math.pow(pressure, 0.75) * scale; 
     switch (curTool) {
     case 'eraser':
-        return w * 3;
+        return widthEraser * scale;
     default:
-        return w;
+        return width * Math.pow(pressure, 0.75) * scale;
     }
 }
 
@@ -206,41 +209,116 @@ function getWidth(pressure) {
  * @params buffer {CircularBuffer} Buffer of max size 3 filled with drawing points.
  */
 function drawFromBuffer(buffer) {
-    switch (curTool) {
-    case 'pen':
+    if (curTool === 'pen') {
         ctx.globalCompositeOperation = 'source-over';
         ctx.strokeStyle = color;
-        break;
-    case 'eraser':
+        if (buffer.size == 2) {
+            /* Not enough points to interpolate, just draw a straight line */
+            let pt1 = buffer.at(0);
+            let pt2 = buffer.at(1);
+
+            let v1 = pt1.toVec();
+            let v2 = pt2.toVec();
+            let end = v1.mid(v2);
+            
+            drawVariableWidthBezier(v1.mid(end), v1, getWidth(pt1.pressure),
+                                    end, getWidth(pt2.pressure));
+        } else if (buffer.size == 3){
+            let pt1 = buffer.at(0);
+            let pt2 = buffer.at(1);
+            let pt3 = buffer.at(2);
+
+            let v1 = pt1.toVec();
+            let v2 = pt2.toVec();
+            let v3 = pt3.toVec();
+
+            drawVariableWidthBezier(v2, v1.mid(v2), getWidth((pt1.pressure + pt2.pressure) * 0.5),
+                                    v2.mid(v3), getWidth((pt2.pressure + pt3.pressure) * 0.5));
+        }
+    } else if (curTool === 'eraser') {
         ctx.globalCompositeOperation = 'destination-out';
-        break;
-    default:
-        return;
-    }
-
-    if (buffer.size == 2) {
-        /* Not enough points to interpolate, just draw a straight line */
-        let pt1 = buffer.at(0);
-        let pt2 = buffer.at(1);
-
+        let pt1 = buffer.at(-2);
+        let pt2 = buffer.at(-1);
+        
         let v1 = pt1.toVec();
         let v2 = pt2.toVec();
         let end = v1.mid(v2);
         
         drawVariableWidthBezier(v1.mid(end), v1, getWidth(pt1.pressure),
                                 end, getWidth(pt2.pressure));
-    } else if (buffer.size == 3){
-        let pt1 = buffer.at(0);
-        let pt2 = buffer.at(1);
-        let pt3 = buffer.at(2);
+    }
+}
 
-        let v1 = pt1.toVec();
-        let v2 = pt2.toVec();
-        let v3 = pt3.toVec();
+function showEraserCircle(width) {
+    eraserCircle.style.display = "block";
+    eraserCircle.style.width = widthEraser + "px";
+    eraserCircle.style.height = widthEraser + "px";
+}
 
-        drawVariableWidthBezier(v2, v1.mid(v2), getWidth((pt1.pressure + pt2.pressure) * 0.5),
-                                v2.mid(v3), getWidth((pt2.pressure + pt3.pressure) * 0.5));
-    } 
+function hideEraserCircle() {
+    eraserCircle.style.display = "none";
+}
+
+function moveEraser(pt) {
+    let rect = canvas.getBoundingClientRect();
+    eraserCircle.style.top = rect.top + pt.y / scale;
+    eraserCircle.style.left = rect.left + pt.x / scale;
+}
+
+/**
+ * Handler for touch/mouse move events.
+ * @param touch The touch or mouse event.
+ * @param id The touch id, or string "mouse" if a mouse event.
+ */
+function onMoveEvent(touch, id) {
+    if (touches[id] !== undefined) {
+        let buffer = touches[id];
+        
+        if (curTool === "eraser") {
+            let curr = new DrawingPoint(touch);
+            buffer.push(curr);
+            drawFromBuffer(buffer);
+            moveEraser(curr);
+        } else {
+            let last = buffer.at(buffer.length - 1);
+            let curr = new DrawingPoint(touch);
+            if (last.toOrigVec().dist(curr.toVec()) < min_dist) {
+                last.copy(curr);
+            } else {
+                buffer.push(curr);
+                drawFromBuffer(buffer);
+            }
+        }        
+    }
+}
+
+/**
+ * Handler for touch/mouse start events.
+ * @param touch The touch or mouse event.
+ * @param id The touch id, or string "mouse" if a mouse event.
+ */
+function onDownEvent(touch, id) {
+    if (curTool === null) {
+        return;
+    }
+
+    if ('touchType' in touch) {
+        if (stylusEnabled && touch.touchType !== "stylus") {
+            return;
+        }
+        if (touch.touchType === "stylus") {
+            stylusEnabled = true;
+        }
+    }
+    
+    let newpt = new DrawingPoint(touch);
+    touches[id] = new CircularBuffer(3);
+    touches[id].push(new DrawingPoint(touch));
+    
+    if (curTool === "eraser") {
+        showEraserCircle(widthEraser);
+        moveEraser(newpt);
+    }
 }
 
 /**
@@ -261,40 +339,12 @@ document.body.addEventListener("contextmenu", (ev) => {
 
 /* Touch event handlers */
 canvas.addEventListener("touchstart", (ev) => {
-    ev.preventDefault();
-    if (curTool === null) {
-        return;
-    }
-    
-    ev.changedTouches.forAll((touch, id) => {
-        if ('touchType' in touch) {
-            if (stylusEnabled && touch.touchType !== "stylus") {
-                return;
-            }
-            if (touch.touchType === "stylus") {
-                stylusEnabled = true;
-            }
-        }
-        touches[id] = new CircularBuffer(3);
-        touches[id].push(new DrawingPoint(touch));
-    });
+    ev.preventDefault();    
+    ev.changedTouches.forAll(onDownEvent);
 });
 canvas.addEventListener("touchmove", (ev) => {
     ev.preventDefault();
-
-    ev.changedTouches.forAll((touch, id) => {
-        if (touches[id] !== undefined) {
-            let buffer = touches[id];
-            let last = buffer.at(buffer.length - 1);
-            let curr = new DrawingPoint(touch);
-            if (last.toOrigVec().dist(curr.toVec()) < min_dist) {
-                last.copy(curr);
-            } else {
-                buffer.push(curr);
-                drawFromBuffer(buffer);
-            }
-        }
-    });
+    ev.changedTouches.forAll(onMoveEvent);
 });
 canvas.addEventListener("touchend", (ev) => {
     ev.preventDefault();
@@ -304,6 +354,10 @@ canvas.addEventListener("touchend", (ev) => {
         }
         touches[id] = undefined;
     });
+
+    if (curTool === "eraser") {
+        hideEraserCircle();
+    }
 });
 canvas.addEventListener("touchcancel", (ev) => {
     ev.preventDefault();
@@ -313,43 +367,37 @@ canvas.addEventListener("touchcancel", (ev) => {
         }
         touches[id] = undefined;
     });
+
+    if (curTool === "eraser") {
+        hideEraserCircle();
+    }
 });
 
 /* Mouse event handlers */
-canvas.addEventListener("mousedown", (ev) => {
-    if (curTool === null) {
-        return;
-    }
-    
-    touches["mouse"] = new CircularBuffer(3);
-    touches["mouse"].push(new DrawingPoint(ev));
-});
-canvas.addEventListener("mousemove", (ev) => {
-    if (touches["mouse"] !== undefined) {
-        let buffer = touches["mouse"];
-        let last = buffer.at(buffer.length - 1);
-        let curr = new DrawingPoint(ev);
-        if (last.toOrigVec().dist(curr.toVec()) < min_dist) {
-            last.copy(curr);
-        } else {
-            buffer.push(curr);
-            drawFromBuffer(buffer);
-        }
-    }
-});
+canvas.addEventListener("mousedown", (ev) => { onDownEvent(ev, "mouse"); });
+canvas.addEventListener("mousemove", (ev) => { onMoveEvent(ev, "mouse"); });
 canvas.addEventListener("mouseup", (ev) => {
     if (touches["mouse"] !== undefined) {
         drawFromBuffer(touches["mouse"]);
     }
     touches["mouse"] = undefined;
+
+    if (curTool === "eraser") {
+        hideEraserCircle();
+    }
 });
 document.body.addEventListener("mouseleave", (ev) => {
     if (touches["mouse"] !== undefined) {
         drawFromBuffer(touches["mouse"]);
     }
     touches["mouse"] = undefined;
+
+    if (curTool === "eraser") {
+        hideEraserCircle();
+    }
 });
 
+/* Set up all the controls */
 var buttons = document.getElementsByClassName("control");
 function deselectAllButtons() {
     for (let i = 0; i < buttons.length; i++) {
@@ -372,6 +420,8 @@ for (let i = 0; i < buttons.length; i++) {
 
 buttons[0].classList.add("selected");
 curTool = "pen";
+
+/* Set up the color picker */
 
 document.querySelector("[setting=color]").children[0].addEventListener("click", (ev) => {
     document.querySelector(".color-popup").classList.toggle("hidden");

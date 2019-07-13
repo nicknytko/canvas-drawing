@@ -71,6 +71,16 @@
              height: 30px;
              display: inline-block;
          }
+         .eraser-circle {
+             border-radius: 100%;
+             border-width: 1px;
+             border-style: solid;
+             border-color: #757575;
+             pointer-events: none;
+
+             position: absolute;
+             transform: translate(-50%, -50%);
+         }
          .color-popup {
              position: absolute;
              transform: translate(calc(15px - 50%), 0);
@@ -126,6 +136,7 @@
                     </div>
                 </div>
             </div>
+            <div id="eraser-circle" class="eraser-circle"></div>
         </div>
         <canvas id="canvas"></canvas>
         <script src="index.js" type="module"></script>

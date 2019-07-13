@@ -50,11 +50,15 @@ export class CircularBuffer {
 
     /**
      * Gets the element at a certain position in the buffer.
-     * @param index Position to grab element from.  This is relative to what is considered the "first" element.
+     * @param index Position to grab element from.  This is relative to what is considered the "first" element.  If the index is negative will go relative from the end.
      * @returns the element itself.
      */
     at(index) {
-        return this.buffer[(this.start + index) % this.max];
+        if (index >= 0) {
+            return this.buffer[(this.start + index) % this.max];
+        } else {
+            return this.buffer[(this.start + this.length + index) % this.max];
+        }
     }
 
     /**
