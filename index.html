@@ -26,8 +26,8 @@
              z-index: 1;
          }
          .control-group {
-             margin-left: 25px;
-             margin-right: 25px;
+             margin-left: 10px;
+             margin-right: 10px;
              height: 40px;
          }
          .control {
@@ -99,6 +99,14 @@
              transform: translate(calc(15px - 50%), -10px);
              pointer-events: none;
          }
+         input[type=range] {
+             width: 100%;
+         }
+         .width-preview {
+             display: block;
+             margin-top: 10px;
+             margin-bottom: 5px;
+         }
         </style>
     </head>
     <body>
@@ -114,28 +122,25 @@
                 </div>
             </div>
             <div class="control-group">
-                <div class="setting" setting="width">
-                    <div class="setting-select"></div>
-                    <object type="image/svg+xml" data="width.svg" style="width: 30px; height: 30px"></object>
-                    <div class="popup hidden" popup="width">
-                        <input type="range" min="2" max="10" value="5" class="slider" id="width-slider">
-                    </div>
-                </div>
                 <div class="setting" setting="color">
                     <div class="setting-select"></div>
                     <object type="image/svg+xml" data="color.svg" style="width: 30px; height: 30px"></object>
                     <div class="popup hidden" popup="color">
+                        <div class="circle" style="background-color: #FFEB3B"></div>
+                        <div class="circle" style="background-color: #FF9800"></div>
                         <div class="circle" style="background-color: #F44336"></div>
                         <div class="circle" style="background-color: #E91E63"></div>
                         <div class="circle" style="background-color: #9C27B0"></div>
-                        <div class="circle" style="background-color: #3F51B5"></div>
+                        <div class="circle" style="background-color: #3F51B5"></div><br>
                         <div class="circle" style="background-color: #00BCD4"></div>
                         <div class="circle" style="background-color: #4CAF50"></div>
-                        <div class="circle" style="background-color: #FFEB3B"></div>
-                        <div class="circle" style="background-color: #F4511E"></div>
                         <div class="circle" style="background-color: #795548"></div>
-                        <div class="circle" style="background-color: #616161"></div>
+                        <div class="circle" style="background-color: #E0E0E0"></div> 
+                        <div class="circle" style="background-color: #616161"></div> 
                         <div class="circle" style="background-color: #000000"></div>
+
+                        <object type="image/svg+xml" data="width.svg" id="width-preview" class="width-preview"></object>                       
+                        <input type="range" value="50" class="slider" id="width-slider">
                     </div>
                 </div>
             </div>

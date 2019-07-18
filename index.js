@@ -7,9 +7,12 @@ var ctx = canvas.getContext("2d");
 /** Scaling of the canvas's internal resolution */
 const scale = 2;
 const min_dist = 7;
+const eraser_scale = 3;
+const min_width = 2;
+const max_width = 20;
+
 /** Width of the pen stroke */
 var width = 10;
-var widthEraser = 30;
 var color = "rgba(0.0,0.0,0.0,1.0)";
 /** The buffer of points for each current touch */
 var touches = {};
@@ -18,24 +21,27 @@ var stylusEnabled = false;
 /** Current selected tool */
 var curTool = null;
 
-var widthSvg = document.querySelector("[setting=width]").children[1];
 var colorSvg = document.querySelector("[setting=color]").children[1];
-var colorCircle;
-var widthLine;
+var colorCircle = null;
+var widthSvg = document.getElementById("width-preview");
+var widthLine = null;
 
 var eraserCircle = document.getElementById("eraser-circle");
 hideEraserCircle();
 
-widthSvg.addEventListener("load", function() {
-    widthLine = widthSvg.getSVGDocument().getElementById("width-line");
-});
 colorSvg.addEventListener("load", function() {
     colorCircle = colorSvg.getSVGDocument().getElementById("color-circle");
+    setWidthSetting(parseFloat(widthSlider.value));
+});
+widthSvg.addEventListener("load", function() {
+    widthLine = widthSvg.getSVGDocument().getElementById("width");
+    setWidthSetting(parseFloat(widthSlider.value));
 });
 window.addEventListener("load", function() {
     try {
-        widthLine = widthSvg.getSVGDocument().getElementById("width-line");
         colorCircle = colorSvg.getSVGDocument().getElementById("color-circle");
+        widthLine = widthSvg.getSVGDocument().getElementById("width");
+        setWidthSetting(parseFloat(widthSlider.value));
     } catch {}
 });
 
@@ -198,7 +204,7 @@ function drawVariableWidthBezier(ctrl, pt1, w1, pt2, w2) {
 function getWidth(pressure) {
     switch (curTool) {
     case 'eraser':
-        return widthEraser * scale;
+        return width * eraser_scale * scale;
     default:
         return width * Math.pow(pressure, 0.75) * scale;
     }
@@ -249,8 +255,8 @@ function drawFromBuffer(buffer) {
 
 function showEraserCircle(width) {
     eraserCircle.style.display = "block";
-    eraserCircle.style.width = widthEraser + "px";
-    eraserCircle.style.height = widthEraser + "px";
+    eraserCircle.style.width = (width * eraser_scale) + "px";
+    eraserCircle.style.height = (width * eraser_scale) + "px";
 }
 
 function hideEraserCircle() {
@@ -264,13 +270,21 @@ function moveEraser(pt) {
 }
 
 function setWidthSetting(newWidth) {
-    if (curTool === "eraser") {
-        widthEraser = newWidth * 5;
-    } else {
-        width = newWidth;
+    let scale = Math.sqrt(newWidth / 100.0);
+    if (scale < 0.1) {
+        scale = 0.1;
     }
+    
+    colorCircle.transform.baseVal.getItem(0).setScale(scale, scale);
+    width = ((newWidth / 100) * (max_width - min_width)) + min_width;
 
-    widthLine.style.strokeWidth = (newWidth * 4) + "px";
+    if (widthLine !== null) {
+        widthLine.style.strokeWidth = (width / 4) + "px";
+    }
+}
+
+function hideColorPopup() {
+    document.querySelector("[popup=color]").classList.add("hidden");
 }
 
 /**
@@ -306,6 +320,7 @@ function onMoveEvent(touch, id) {
  * @param id The touch id, or string "mouse" if a mouse event.
  */
 function onDownEvent(touch, id) {
+    hideColorPopup();
     if (curTool === null) {
         return;
     }
@@ -324,7 +339,7 @@ function onDownEvent(touch, id) {
     touches[id].push(newpt);
     
     if (curTool === "eraser") {
-        showEraserCircle(widthEraser);
+        showEraserCircle(width);
         moveEraser(newpt);
     }
 }
@@ -397,6 +412,7 @@ function deselectAllButtons() {
 
 for (let i = 0; i < buttons.length; i++) {
     buttons[i].addEventListener("mousedown", (ev) => {
+        hideColorPopup();
         if (buttons[i].classList.contains("selected")) {
             buttons[i].classList.remove("selected");
             curTool = null;
@@ -415,9 +431,6 @@ curTool = "pen";
 document.querySelector("[setting=color]").children[0].addEventListener("click", (ev) => {
     document.querySelector("[popup=color]").classList.toggle("hidden");
 });
-document.querySelector("[setting=width]").children[0].addEventListener("click", (ev) => {
-    document.querySelector("[popup=width]").classList.toggle("hidden");
-});
 
 var circle_buttons = document.getElementsByClassName("circle");
 for (let i = 0; i < circle_buttons.length; i++) {
@@ -425,8 +438,9 @@ for (let i = 0; i < circle_buttons.length; i++) {
     circ.addEventListener("mousedown", (ev) => {
         let col = circ.style.backgroundColor.toString();
         colorCircle.style.fill = col;
+        widthLine.style.stroke = col;
         color = col;
-        document.querySelector("[popup=color]").classList.add("hidden");
+        hideColorPopup();
     });
 }
 
